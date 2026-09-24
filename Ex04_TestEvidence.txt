@@ -1,0 +1,94 @@
+=== KET QUA CHAY TEST - Session17 / Bai tap 4 ===
+Du an        : flash-sale-sync-cache
+Test         : 5 tests | failures=0 | errors=0 | skipped=0
+Moi truong   : JDK 17.0.18 | Gradle 9.5.1 | Spring Boot 4.1.1 | Redis 5.0.14.1
+Lenh chay    : gradlew test
+Ket qua      : BUILD SUCCESSFUL in 53s
+
+Cache name   : "flash-sale"     Key: #id
+Thoi gian tai tao cache mo phong: Thread.sleep(2000)
+
+
+=== BANG DOI CHIEU TIÊU CHÍ CHẤM ĐIỂM CỦA ĐỀ ===
+
+| Tieu chi                              | Yeu cau                                              | Ket qua do duoc                | Dat |
+|---------------------------------------|------------------------------------------------------|--------------------------------|-----|
+| Dung annotation                       | @Cacheable(value="flash-sale", key="#id", sync=true) | Dung nguyen van                |  OK |
+| Mot lan truy van DB                   | Chi 1 dong "Fetching from Database" du 50 request    | 1 dong / 50 request            |  OK |
+| Khong bi timeout                      | Ca 50 request tra ve thanh cong                      | 50/50 thanh cong, 0 loi        |  OK |
+| Co che lock hoat dong                 | Bo sync di thi log hien nhieu lan truy van DB        | 50 dong log, 50 truy van DB    |  OK |
+| Thoi gian xu ly                       | Xap xi 1 lan tai tao cache, khong phai 50 lan        | 2008 ms (tuan tu se la 100000 ms) | OK |
+
+
+--- A. sync = true: 50 REQUEST DONG THOI -> CHI 1 DONG LOG ---
+
+>>> [KB1 sync = true] 50 request dong thoi vao id=1
+>>> [KB1 sync = true] So dong log 'Fetching from Database for product' = 1
+>>> [KB1 sync = true] So truy van DB = 1 | thanh cong = 50/50 | loi = 0 | tong thoi gian = 2018 ms
+
+  => Dung 1 dong "Fetching from Database for product 1" du co 50 request cung luc.
+     Ca 50 request deu nhan duoc ket qua, khong request nao bi timeout.
+     Test dem truc tiep SO DONG LOG bang Logback ListAppender (khong dem qua bien dem noi bo),
+     dung voi tieu chi cham diem cua de bai.
+
+
+--- B. THOI GIAN XU LY ---
+
+>>> [KB2 THOI GIAN] 50 request hoan thanh trong 2008 ms
+                   (thoi gian tai tao cache = 2000 ms; neu tuan tu se la 100000 ms)
+
+  => 2008 ms ~ 2000 ms + overhead. Neu KHONG co lock va chay tuan tu thi phai mat 100.000 ms.
+     Day la bang chung dinh luong cho thay 49 request con lai da CHO va dung lai ket qua
+     cua request dau tien, chu khong tu di xuong Database.
+
+
+--- C. BO sync DI -> CACHE STAMPEDE XAY RA ---
+
+>>> [KB3 sync = false] 50 request dong thoi vao id=1
+>>> [KB3 sync = false] So dong log 'Fetching from Database for product' = 50
+>>> [KB3 sync = false] So truy van DB = 50 | tong thoi gian = 2075 ms
+
+  => Cung 50 request, chi khac sync = false: 50 dong log, 50 truy van DB.
+     Day chinh la hien tuong Cache Stampede (Thundering Herd): khi TTL het han, moi request
+     deu thay cache trong va dong loat dap xuong Database.
+
+
+--- D. DOI CHIEU VỚI LƯU Ý TRONG ĐỀ VỀ REDIS ---
+
+De bai luu y: "Redis khong ho tro sync mac dinh, can dung Caffeine hoac Ehcache".
+Ket qua kiem chung cho thay nhan dinh do DUNG voi cach cau hinh mac dinh, nhung CO the khac phuc:
+
+>>> [KB4 REDIS + locking writer] 50 request dong thoi
+>>> [KB4 REDIS + locking writer] So dong log 'Fetching from Database' = 1
+>>> [KB4 REDIS + locking writer] So truy van DB = 1 | thanh cong = 50/50 | loi = 0 | thoi gian = 3856 ms
+
+>>> [KB5 REDIS + non-locking writer] 50 request dong thoi
+>>> [KB5 REDIS + non-locking writer] So dong log 'Fetching from Database' = 50
+>>> [KB5 REDIS + non-locking writer] So truy van DB = 50 -> sync = true KHONG co tac dung
+
+  => Cung la Redis, cung @Cacheable(sync = true):
+       - RedisCacheManager.builder(connectionFactory)   -> non-locking writer -> 50 truy van DB (KHONG hieu qua)
+       - RedisCacheWriter.lockingRedisCacheWriter(...)  -> locking writer     -> 1 truy van DB  (HIEU QUA)
+     Vi vay bai lam dung CAFFEINE lam provider mac dinh (chay dung ngay, khong can cau hinh gi),
+     dong thoi cung cap profile Redis da duoc sua de doi chieu.
+
+
+--- TONG HOP ---
+
+FlashSaleSyncCacheTest   : 3 PASSED
+RedisSyncCacheTest       : 1 PASSED
+RedisNonLockingWriterTest: 1 PASSED
+--------------------------------------------------
+TONG                     : 5 PASSED | 0 FAILED | 0 ERROR
+
+BUILD SUCCESSFUL in 53s
+
+
+--- GOI Y CHUP ANH MAN HINH NOP BAI ---
+Chay: gradlew bootRun   (hoac java -jar build/libs/flash-sale-sync-cache-0.0.1-SNAPSHOT.jar)
+Sau do mo trinh duyet:
+    http://localhost:8600/api/flash-sale/concurrent?id=1&requests=50&sync=true
+Man hinh console se chi hien DUNG 1 dong:
+    Fetching from Database for product 1
+-> chup anh dong log nay.
+Doi sync=false de chup doi chieu (se thay 50 dong).

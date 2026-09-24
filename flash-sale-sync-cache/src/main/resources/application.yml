@@ -1,0 +1,31 @@
+server:
+  port: 8600
+spring:
+  application:
+    name: flash-sale-sync-cache
+
+  # Tu cau hinh CacheManager trong CacheConfig (theo app.cache.provider),
+  # nen tat auto-configuration cua Spring Boot de tranh trung bean.
+  cache:
+    type: none
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      connect-timeout: 2s
+      timeout: 2s
+
+app:
+  cache:
+    # caffeine (mac dinh) hoac redis
+    provider: caffeine
+    ttl: 5m
+    max-size: 1000
+  db:
+    # Do tre mo phong truy van phuc tap: Thread.sleep(2000)
+    query-delay-ms: 2000
+
+logging:
+  level:
+    com.example.flashsalecache: INFO
