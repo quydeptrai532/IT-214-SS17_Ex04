@@ -72,3 +72,4 @@ curl "http://localhost:8600/api/flash-sale/concurrent?id=1&requests=50&sync=fals
 sẽ thấy **đúng 1 dòng** `Fetching from Database for product 1`.
 
 **5/5 test PASSED — BUILD SUCCESSFUL in 53s**
+a
